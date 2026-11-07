@@ -41,8 +41,9 @@ class ESPRaincoastConfig(DatasetConfig):
         If True, audio files will be spliced between 'Begin Time(s)' and 'End Time(s)'.
         If False, entire audio files will be loaded. Default is True.
     mono_method : str | None
-        Method to convert stereo audio to mono. If None, no conversion is done.
-        Options are ["keep_first", "average"]. Default is None.
+        Method to convert stereo audio to mono: "keep_first" selects the first
+        channel and "average" averages both channels. None (the default) preserves
+        stereo. Mono input remains one-dimensional for all methods.
     data_root : str | AnyPathT | None
         The root directory for the dataset. This is optionally appended to the
         path item of a sample in the dataset.
@@ -67,8 +68,14 @@ class ESPRaincoastConfig(DatasetConfig):
 
 @register_dataset
 class ESPRaincoast(Dataset):
-    """ESP Raincoast.org dataset
+    """ESP Raincoast.org dataset.
+
     Recorded by Dylan Smyth, Valeria Vergara lab.
+
+    Audio is returned as float32 arrays with time on the first axis. By default,
+    stereo is preserved with shape (frames, channels), while mono input has shape
+    (frames,). Set `mono_method` to "average" or "keep_first" to convert stereo
+    to mono. Resampling preserves this channel layout.
     """
 
     info = DatasetInfo(
@@ -103,14 +110,17 @@ class ESPRaincoast(Dataset):
         output_take_and_give : dict[str, str]
             A dictionary mapping the original column names to the new column names.
             It acts as a filter as well.
-        sample_rate : int
+        sample_rate : int | None
             The sample rate to which audio files should be resampled.
+            If None (the default), audio is loaded at its original sample rate.
         load_audio_segments : bool
             If True, the audio files will be spliced between the 'Begin time(s)'
             and 'End time (s)' columns in the dataset.
             If False, the entire audio file will be loaded.
         mono_method : str | None
-            Method to convert stereo audio to mono. If None, no conversion is done.
+            Method to convert stereo audio to mono: "keep_first" selects the first
+            channel and "average" averages both channels. None (the default)
+            preserves stereo. Mono input remains one-dimensional for all methods.
         data_root : str | AnyPathT, optional
             The root directory for the dataset. This is optionally appended to the
             path item of a sample in the dataset.
@@ -245,13 +255,14 @@ class ESPRaincoast(Dataset):
 
         # Stereo to mono if necessary.
         if self.mono_method is not None:
-            audio = audio_stereo_to_mono(audio, mono_method="average")
+            audio = audio_stereo_to_mono(audio, mono_method=self.mono_method)
 
         if self.sample_rate is not None and sample_rate != self.sample_rate:
             audio = librosa.resample(
                 y=audio,
                 orig_sr=sample_rate,
                 target_sr=self.sample_rate,
+                axis=0,
                 scale=True,
                 res_type="kaiser_best",
             )
